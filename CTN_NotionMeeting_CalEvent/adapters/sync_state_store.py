@@ -7,13 +7,20 @@ from botocore.exceptions import ClientError
 from config import DYNAMO_TABLE, RSVP_SYNC_STATE_KEY
 from rsvp_sync.models import SyncState
 
-dynamodb = boto3.client("dynamodb")
+_dynamodb = None
+
+
+def _get_client():
+    global _dynamodb
+    if _dynamodb is None:
+        _dynamodb = boto3.client("dynamodb")
+    return _dynamodb
 
 
 @on_exception(expo, ClientError, max_tries=3, max_time=10)
 def get_sync_state() -> Optional[SyncState]:
     """Read the sync state DynamoDB item."""
-    resp = dynamodb.get_item(
+    resp = _get_client().get_item(
         TableName=DYNAMO_TABLE,
         Key={"client_id": {"S": RSVP_SYNC_STATE_KEY}},
     )
@@ -32,7 +39,7 @@ def get_sync_state() -> Optional[SyncState]:
 @on_exception(expo, ClientError, max_tries=3, max_time=10)
 def update_sync_token(token: str) -> None:
     """Atomically update the sync_token field."""
-    dynamodb.update_item(
+    _get_client().update_item(
         TableName=DYNAMO_TABLE,
         Key={"client_id": {"S": RSVP_SYNC_STATE_KEY}},
         UpdateExpression="SET sync_token = :t",
@@ -45,7 +52,7 @@ def update_channel_state(
     channel_id: str, resource_id: str, expiration: int, channel_token: str
 ) -> None:
     """Persist watch channel metadata."""
-    dynamodb.update_item(
+    _get_client().update_item(
         TableName=DYNAMO_TABLE,
         Key={"client_id": {"S": RSVP_SYNC_STATE_KEY}},
         UpdateExpression=(
@@ -70,7 +77,7 @@ def update_full_state(
     channel_token: str,
 ) -> None:
     """Persist all fields at once (bootstrap)."""
-    dynamodb.update_item(
+    _get_client().update_item(
         TableName=DYNAMO_TABLE,
         Key={"client_id": {"S": RSVP_SYNC_STATE_KEY}},
         UpdateExpression=(
