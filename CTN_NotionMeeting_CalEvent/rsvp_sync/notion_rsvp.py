@@ -14,7 +14,7 @@ from rsvp_sync.models import AttendeeRecord
 
 log = logging.getLogger(__name__)
 
-_DB_QUERY_URL = f"https://api.notion.com/v1/databases/{NOTION_RSVP_DATASOURCE_ID}/query"
+_DB_QUERY_URL = f"https://api.notion.com/v1/data_sources/{NOTION_RSVP_DATASOURCE_ID}/query"
 _PAGES_URL = "https://api.notion.com/v1/pages"
 
 
@@ -74,7 +74,7 @@ def _build_properties(record: AttendeeRecord) -> dict:
 def create_rsvp_row(record: AttendeeRecord) -> str:
     """Create a new RSVP row in Notion and return the page ID."""
     payload = {
-        "parent": {"database_id": NOTION_RSVP_DATASOURCE_ID},
+        "parent": {"data_source_id": NOTION_RSVP_DATASOURCE_ID},
         "properties": _build_properties(record),
     }
     resp = _sess().post(_PAGES_URL, json=payload, timeout=10)
