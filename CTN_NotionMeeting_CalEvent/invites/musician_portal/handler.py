@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import os
 from typing import Any, Dict
 import requests
 
 from adapters.google_calendar import build_calendar_service, upsert_event
+from adapters.notion_client import fetch_notion_user_email
 from adapters.token_store import (
     get_db_item,
     get_google_credentials,
@@ -27,8 +27,21 @@ def handle(body: Dict[str, Any]) -> Dict[str, Any]:
         logger.warning("[musician_portal] EXIT: missing page_id")
         return {"statusCode": 400, "body": "Missing Notion page id"}
 
-    # 1) Resolve organizer email from environment (calendar owner)
-    organizer_email = "chutneynomad@gmail.com"  # TEMP: hardcoded for testing
+    notion_user_id = (body.get("source") or {}).get("user_id")
+    if not notion_user_id:
+        logger.warning("[musician_portal] EXIT: missing notion_user_id, source=%s", body.get("source"))
+        return {"statusCode": 400, "body": "Missing Notion user_id"}
+
+    # 1) Resolve organizer email
+    logger.info("[musician_portal] resolving email for notion_user_id=%s", notion_user_id)
+    try:
+        organizer_email = fetch_notion_user_email(notion_user_id)
+    except requests.RequestException:
+        logger.exception("[musician_portal] EXIT: failed to fetch Notion user email for page %s", page_id)
+        return {"statusCode": 502, "body": "notion_error"}
+    if not organizer_email:
+        logger.warning("[musician_portal] EXIT: no email resolved for notion_user_id=%s", notion_user_id)
+        return {"statusCode": 400, "body": "Unable to resolve organizer email"}
     logger.info("[musician_portal] organizer_email=%s", organizer_email)
 
     # 2) Load OAuth record
