@@ -18,9 +18,15 @@ from config import (
 
 log = logging.getLogger(__name__)
 
-secrets_client = boto3.client("secretsmanager", region_name=REGION_NAME)
-
+_secrets_client = None
 _cached_token: Optional[str] = None
+
+
+def _get_secrets_client():
+    global _secrets_client
+    if _secrets_client is None:
+        _secrets_client = boto3.client("secretsmanager", region_name=REGION_NAME)
+    return _secrets_client
 
 
 def _get_notion_token() -> str:
@@ -29,7 +35,7 @@ def _get_notion_token() -> str:
     if _cached_token is not None:
         return _cached_token
     try:
-        secret_value: Dict[str, Any] = secrets_client.get_secret_value(
+        secret_value: Dict[str, Any] = _get_secrets_client().get_secret_value(
             SecretId=NOTION_TOKEN_SECRET
         )
         secret_dict = json.loads(secret_value["SecretString"])
