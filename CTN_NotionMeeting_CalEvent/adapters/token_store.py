@@ -8,12 +8,27 @@ from google.oauth2.credentials import Credentials
 
 from config import DYNAMO_TABLE, SECRET_NAME
 
-dynamodb = boto3.client("dynamodb")
-secrets_manager = boto3.client("secretsmanager")
+_dynamodb = None
+_secrets_manager = None
+
+
+def _get_dynamodb():
+    global _dynamodb
+    if _dynamodb is None:
+        _dynamodb = boto3.client("dynamodb")
+    return _dynamodb
+
+
+def _get_secrets_manager():
+    global _secrets_manager
+    if _secrets_manager is None:
+        _secrets_manager = boto3.client("secretsmanager")
+    return _secrets_manager
+
 
 @on_exception(expo, ClientError, max_tries=3, max_time=10)
 def get_db_item(client_id: str) -> Optional[Dict[str, Any]]:
-    resp = dynamodb.get_item(TableName=DYNAMO_TABLE, Key={"client_id": {"S": client_id}})
+    resp = _get_dynamodb().get_item(TableName=DYNAMO_TABLE, Key={"client_id": {"S": client_id}})
     item = resp.get("Item")
     if not item:
         return None
@@ -21,7 +36,7 @@ def get_db_item(client_id: str) -> Optional[Dict[str, Any]]:
 
 @on_exception(expo, ClientError, max_tries=3, max_time=10)
 def update_db_notion_id(client_id: str, notion_user_id: str) -> None:
-    dynamodb.update_item(
+    _get_dynamodb().update_item(
         TableName=DYNAMO_TABLE,
         Key={"client_id": {"S": client_id}},
         UpdateExpression="SET notion_user_id = :u",
@@ -30,7 +45,7 @@ def update_db_notion_id(client_id: str, notion_user_id: str) -> None:
 
 @on_exception(expo, ClientError, max_tries=3, max_time=10)
 def get_google_credentials(refresh_token: str) -> Credentials:
-    secret_val = secrets_manager.get_secret_value(SecretId=SECRET_NAME)
+    secret_val = _get_secrets_manager().get_secret_value(SecretId=SECRET_NAME)
     creds_json = json.loads(secret_val["SecretString"])["web"]
     return Credentials(
         None,
