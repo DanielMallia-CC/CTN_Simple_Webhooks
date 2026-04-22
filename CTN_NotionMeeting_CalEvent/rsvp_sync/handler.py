@@ -16,7 +16,8 @@ from googleapiclient.errors import HttpError
 from rsvp_sync import notion_rsvp
 from rsvp_sync.models import AttendeeRecord
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
+log.setLevel(logging.INFO)
 
 
 # ---------------------------------------------------------------------------
@@ -56,10 +57,13 @@ def _extract_notion_page_id(description: str | None) -> str | None:
         return None
     m = _NOTION_URL_RE.search(description)
     if not m:
+        log.debug("No Notion URL found in description: %.200s", description)
         return None
     raw = m.group(1)
     # Format as UUID with dashes
-    return f"{raw[:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:]}"
+    page_id = f"{raw[:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:]}"
+    log.info("Extracted Notion page_id=%s from event description", page_id)
+    return page_id
 
 
 def _process_events(events: list[dict]) -> List[AttendeeRecord]:
@@ -76,6 +80,11 @@ def _process_events(events: list[dict]) -> List[AttendeeRecord]:
 
         cancelled = ev.get("status") == "cancelled"
         notion_page_id = _extract_notion_page_id(ev.get("description"))
+        log.info(
+            "Processing event %s (%s): cancelled=%s, notion_page_id=%s, attendees=%d, has_description=%s",
+            ev["id"], ev.get("summary", ""), cancelled, notion_page_id,
+            len(ev.get("attendees", [])), bool(ev.get("description")),
+        )
 
         for att in ev["attendees"]:
             records.append(
@@ -286,12 +295,15 @@ def handle_bootstrap() -> dict:
 
     # Full sync — only future events.
     time_min = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    log.info("Bootstrap: fetching events from %s for calendar %s", time_min, config.RSVP_CALENDAR_ID)
     events, sync_token = google_calendar.list_events_full(
         service, config.RSVP_CALENDAR_ID, time_min=time_min
     )
+    log.info("Bootstrap: fetched %d events, sync_token=%s", len(events), sync_token[:20] if sync_token else None)
 
     # Process events and upsert to Notion.
     records = _process_events(events)
+    log.info("Bootstrap: %d attendee records to upsert", len(records))
     for record in records:
         notion_rsvp.upsert_or_trash(record)
 

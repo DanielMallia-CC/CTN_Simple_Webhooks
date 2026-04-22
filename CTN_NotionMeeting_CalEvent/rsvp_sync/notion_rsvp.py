@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Optional
 
@@ -12,7 +13,8 @@ from adapters.notion_client import _sess
 from config import NOTION_RSVP_DATASOURCE_ID
 from rsvp_sync.models import AttendeeRecord
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
+log.setLevel(logging.INFO)
 
 _DB_QUERY_URL = f"https://api.notion.com/v1/data_sources/{NOTION_RSVP_DATASOURCE_ID}/query"
 _PAGES_URL = "https://api.notion.com/v1/pages"
@@ -89,12 +91,22 @@ def create_rsvp_row(record: AttendeeRecord) -> str:
         "properties": _build_properties(record),
     }
     template_id = _RSVP_TEMPLATE_IDS.get(record.rsvp_status)
+    log.info(
+        "create_rsvp_row: rsvp_status=%s, template_id=%s, notion_page_id=%s",
+        record.rsvp_status, template_id, record.notion_page_id,
+    )
     if template_id:
         payload["template"] = {
             "type": "template_id",
             "template_id": template_id,
         }
+    else:
+        log.warning("No template found for rsvp_status=%s", record.rsvp_status)
+
+    log.info("create_rsvp_row payload: %s", json.dumps(payload, default=str))
     resp = _sess().post(_PAGES_URL, json=payload, timeout=10)
+    if not resp.ok:
+        log.error("create_rsvp_row failed: %s %s", resp.status_code, resp.text)
     resp.raise_for_status()
     page_id = resp.json()["id"]
     log.info("Created RSVP row %s for %s (template=%s)", page_id, record.row_key, record.rsvp_status)
