@@ -17,6 +17,7 @@ from config import (
 )
 
 log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 _secrets_client = None
 _cached_token: Optional[str] = None
@@ -73,13 +74,22 @@ def _sess() -> requests.Session:
 
 @on_exception(expo, requests.RequestException, max_tries=3, max_time=30)
 def fetch_notion_user_email(notion_user_id: str) -> Optional[str]:
-    resp = _sess().get(f"{NOTION_USER_ENDPOINT}/{notion_user_id}", timeout=10)
+    url = f"{NOTION_USER_ENDPOINT}/{notion_user_id}"
+    log.info("[notion_client] fetching user email url=%s", url)
+    resp = _sess().get(url, timeout=10)
+    log.info("[notion_client] user response status=%s", resp.status_code)
     resp.raise_for_status()
-    return resp.json().get("person", {}).get("email")
+    data = resp.json()
+    email = data.get("person", {}).get("email")
+    log.info("[notion_client] resolved email=%s for user=%s", email, notion_user_id)
+    return email
 
 
 @on_exception(expo, requests.RequestException, max_tries=3, max_time=30)
 def update_page_properties(page_id: str, properties: Dict[str, Any]) -> None:
     payload = {"properties": properties}
-    resp = _sess().patch(f"{NOTION_PAGES_ENDPOINT}/{page_id}", json=payload, timeout=10)
+    url = f"{NOTION_PAGES_ENDPOINT}/{page_id}"
+    log.info("[notion_client] updating page properties url=%s props=%s", url, list(properties.keys()))
+    resp = _sess().patch(url, json=payload, timeout=10)
+    log.info("[notion_client] update response status=%s", resp.status_code)
     resp.raise_for_status()

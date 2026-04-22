@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
+import sys
 from typing import Any, Dict
 
 from invites import get_handler
 from logging_setup import logger
 from rsvp_sync import handler as rsvp_handler
+
+# Ensure root logger also outputs (Lambda runtime captures root logger)
+logging.getLogger().setLevel(logging.INFO)
 
 
 def _parse_body(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -56,9 +61,17 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     handler = get_handler(database_id)
     if not handler:
         logger.warning("No handler for database_id=%s (normalized=%s)", database_id, database_id.replace("-", ""))
+        print(f"[FALLBACK] No handler for database_id={database_id}", file=sys.stderr, flush=True)
         return {
             "statusCode": 400,
             "body": f"Unsupported database_id: {database_id}",
         }
 
-    return handler(body)
+    logger.info("Dispatching to handler for database_id=%s", database_id)
+    try:
+        result = handler(body)
+        logger.info("Handler returned statusCode=%s", result.get("statusCode"))
+        return result
+    except Exception:
+        logger.exception("Unhandled exception in handler for database_id=%s", database_id)
+        return {"statusCode": 500, "body": "internal_error"}
