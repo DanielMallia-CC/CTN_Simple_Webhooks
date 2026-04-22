@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Dict
 import requests
 
 from adapters.google_calendar import build_calendar_service, upsert_event
-from adapters.notion_client import fetch_notion_user_email
 from adapters.token_store import (
     get_db_item,
     get_google_credentials,
@@ -28,21 +28,8 @@ def handle(body: Dict[str, Any]) -> Dict[str, Any]:
         logger.warning("[meetings] EXIT: missing page_id")
         return {"statusCode": 400, "body": "Missing Notion page id"}
 
-    notion_user_id = (body.get("source") or {}).get("user_id")
-    if not notion_user_id:
-        logger.warning("[meetings] EXIT: missing notion_user_id, source=%s", body.get("source"))
-        return {"statusCode": 400, "body": "Missing Notion user_id"}
-
-    # 1) Resolve organizer email
-    logger.info("[meetings] resolving email for notion_user_id=%s", notion_user_id)
-    try:
-        organizer_email = "chutneynomad@gmail.com"  # TEMP: hardcoded for testing
-    except requests.RequestException:
-        logger.exception("[meetings] EXIT: failed to fetch Notion user email for page %s", page_id)
-        return {"statusCode": 502, "body": "notion_error"}
-    if not organizer_email:
-        logger.warning("[meetings] EXIT: no email resolved for notion_user_id=%s", notion_user_id)
-        return {"statusCode": 400, "body": "Unable to resolve organizer email"}
+    # 1) Resolve organizer email from environment (calendar owner)
+    organizer_email = "chutneynomad@gmail.com"  # TEMP: hardcoded for testing
     logger.info("[meetings] organizer_email=%s", organizer_email)
 
     # 2) Load OAuth record
@@ -56,8 +43,10 @@ def handle(body: Dict[str, Any]) -> Dict[str, Any]:
     logger.info("[meetings] OAuth record found, has_refresh_token=True")
 
     if not record.get("notion_user_id"):
-        logger.info("[meetings] linking notion_user_id=%s to client_id=%s", notion_user_id, client_id)
-        update_db_notion_id(client_id, notion_user_id)
+        notion_user_id = (body.get("source") or {}).get("user_id")
+        if notion_user_id:
+            logger.info("[meetings] linking notion_user_id=%s to client_id=%s", notion_user_id, client_id)
+            update_db_notion_id(client_id, notion_user_id)
 
     # 3) Build Google Calendar service
     logger.info("[meetings] building Google Calendar service")

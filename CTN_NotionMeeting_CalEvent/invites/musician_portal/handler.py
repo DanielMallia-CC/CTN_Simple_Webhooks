@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Dict
 import requests
 
 from adapters.google_calendar import build_calendar_service, upsert_event
-from adapters.notion_client import fetch_notion_user_email
 from adapters.token_store import (
     get_db_item,
     get_google_credentials,
@@ -21,36 +21,36 @@ def handle(body: Dict[str, Any]) -> Dict[str, Any]:
     page_id = data.get("id")
     notion_url = data.get("url") or ""
 
+    logger.info("[musician_portal] handler entered page_id=%s", page_id)
+
     if not page_id:
+        logger.warning("[musician_portal] EXIT: missing page_id")
         return {"statusCode": 400, "body": "Missing Notion page id"}
 
-    notion_user_id = (body.get("source") or {}).get("user_id")
-    if not notion_user_id:
-        return {"statusCode": 400, "body": "Missing Notion user_id"}
-
-    # 1) Resolve organizer email
-    try:
-        organizer_email = fetch_notion_user_email(notion_user_id)
-    except requests.RequestException:
-        logger.exception("Failed to fetch Notion user email for page %s", page_id)
-        return {"statusCode": 502, "body": "notion_error"}
-    if not organizer_email:
-        return {"statusCode": 400, "body": "Unable to resolve organizer email"}
+    # 1) Resolve organizer email from environment (calendar owner)
+    organizer_email = "chutneynomad@gmail.com"  # TEMP: hardcoded for testing
+    logger.info("[musician_portal] organizer_email=%s", organizer_email)
 
     # 2) Load OAuth record
     client_id = organizer_email.split("@")[0]
+    logger.info("[musician_portal] loading OAuth record for client_id=%s", client_id)
     record = get_db_item(client_id)
     if not record or not record.get("refresh_token"):
+        logger.warning("[musician_portal] EXIT: no OAuth record for %s (client_id=%s)", organizer_email, client_id)
         return {"statusCode": 404, "body": f"No credentials for {organizer_email}"}
+    logger.info("[musician_portal] OAuth record found")
 
-    if not record.get("notion_user_id"):
+    notion_user_id = (body.get("source") or {}).get("user_id")
+    if notion_user_id and not record.get("notion_user_id"):
         update_db_notion_id(client_id, notion_user_id)
 
     # 3) Build Google Calendar service
+    logger.info("[musician_portal] building Google Calendar service")
     creds = get_google_credentials(record["refresh_token"])
     calendar_service = build_calendar_service(creds)
 
     # 4) Parse MP payload
+    logger.info("[musician_portal] parsing payload, property_keys=%s", list(properties.keys()))
     try:
         parsed = parse_musician_portal(
             properties=properties,
@@ -58,13 +58,16 @@ def handle(body: Dict[str, Any]) -> Dict[str, Any]:
             organizer_email=organizer_email,
         )
     except ValueError as e:
-        logger.warning("Invalid Notion payload for page %s: %s", page_id, str(e))
+        logger.warning("[musician_portal] EXIT: invalid payload for page %s: %s", page_id, str(e))
         return {"statusCode": 400, "body": str(e)}
     
     event_body = parsed["event_body"]
     existing_event_id = parsed["existing_event_id"]
+    logger.info("[musician_portal] parsed OK, existing_event_id=%s, summary=%s",
+                existing_event_id, event_body.get("summary"))
 
     # 5) Upsert Google Calendar event
+    logger.info("[musician_portal] upserting calendar event, is_update=%s", bool(existing_event_id))
     try:
         result = upsert_event(
             calendar_service,
@@ -74,26 +77,31 @@ def handle(body: Dict[str, Any]) -> Dict[str, Any]:
             send_updates="all",
         )
     except Exception:
-        logger.exception("Failed to upsert Google Calendar event")
+        logger.exception("[musician_portal] EXIT: failed to upsert Google Calendar event for page %s", page_id)
         return {"statusCode": 502, "body": "calendar_error"}
 
     event_id = result.get("id")
     event_url = result.get("htmlLink")
+    logger.info("[musician_portal] upsert result: event_id=%s event_url=%s", event_id, event_url)
 
     if not event_id or not event_url:
-        logger.warning("Calendar upsert returned no id or url for page %s", page_id)
+        logger.warning("[musician_portal] EXIT: no id or url in result, keys=%s", list(result.keys()))
         return {"statusCode": 500, "body": "invalid_calendar_response"}
 
     # 6) Persist metadata back to Notion
+    logger.info("[musician_portal] persisting event metadata to Notion page %s", page_id)
     try:
         persist_google_event_metadata(
             page_id=page_id,
             event_id=event_id,
             event_url=event_url,
         )
+        logger.info("[musician_portal] metadata persisted OK")
     except requests.RequestException:
-        logger.warning("Calendar event created but failed to update Notion for page %s", page_id, exc_info=True)
+        logger.warning("[musician_portal] calendar event created but failed to update Notion for page %s",
+                        page_id, exc_info=True)
 
+    logger.info("[musician_portal] SUCCESS page_id=%s event_url=%s", page_id, event_url)
     return {
         "statusCode": 200,
         "body": event_url,
