@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict
 
-from invites import HANDLERS
+from invites import get_handler
 from logging_setup import logger
 from rsvp_sync import handler as rsvp_handler
 
@@ -50,11 +50,12 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     logger.info("Lambda invoked database_id=%s page_id=%s", database_id, data.get("id"))
 
     if not database_id:
+        logger.warning("No database_id in payload, keys present: %s", list(data.keys()))
         return {"statusCode": 400, "body": "Missing data.parent.database_id"}
 
-    handler = HANDLERS.get(database_id)
+    handler = get_handler(database_id)
     if not handler:
-        logger.warning("No handler for database_id %s", database_id)
+        logger.warning("No handler for database_id=%s (normalized=%s)", database_id, database_id.replace("-", ""))
         return {
             "statusCode": 400,
             "body": f"Unsupported database_id: {database_id}",
