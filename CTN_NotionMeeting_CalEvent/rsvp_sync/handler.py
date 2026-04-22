@@ -72,28 +72,34 @@ def _resolve_gig_page_id(musician_portal_page_id: str | None) -> str | None:
         return None
     try:
         from adapters.notion_client import _sess
+
+        # First get the page to find the property ID for Gig (Management)
         resp = _sess().get(
-            f"https://api.notion.com/v1/pages/{musician_portal_page_id}/properties/{config.GIG_RELATION_PROP}",
+            f"https://api.notion.com/v1/pages/{musician_portal_page_id}",
             timeout=10,
         )
-        if not resp.ok:
-            # Property name might need URL encoding, try fetching the full page instead
-            log.warning("Property endpoint failed (%s), fetching full page", resp.status_code)
-            resp = _sess().get(
-                f"https://api.notion.com/v1/pages/{musician_portal_page_id}",
+        resp.raise_for_status()
+        page = resp.json()
+        gig_prop = page.get("properties", {}).get(config.GIG_RELATION_PROP, {})
+        prop_id = gig_prop.get("id")
+        relations = gig_prop.get("relation", [])
+
+        # If relation is empty but has_more is true, fetch via property item endpoint
+        if not relations and gig_prop.get("has_more") and prop_id:
+            log.info("Fetching paginated relation property %s for page %s", prop_id, musician_portal_page_id)
+            prop_resp = _sess().get(
+                f"https://api.notion.com/v1/pages/{musician_portal_page_id}/properties/{prop_id}",
                 timeout=10,
             )
-            resp.raise_for_status()
-            page = resp.json()
-            gig_prop = page.get("properties", {}).get(config.GIG_RELATION_PROP, {})
-            relations = gig_prop.get("relation", [])
-        else:
-            data = resp.json()
-            # Paginated property endpoint returns results array
-            relations = data.get("results", data.get("relation", []))
+            prop_resp.raise_for_status()
+            prop_data = prop_resp.json()
+            relations = prop_data.get("results", [])
 
         if relations:
             gig_id = relations[0].get("id")
+            # results from property endpoint have {"relation": {"id": "..."}} structure
+            if not gig_id and "relation" in relations[0]:
+                gig_id = relations[0]["relation"].get("id")
             log.info("Resolved Gig page_id=%s from Musician Portal page %s", gig_id, musician_portal_page_id)
             return gig_id
         log.info("No Gig relation found on Musician Portal page %s", musician_portal_page_id)
