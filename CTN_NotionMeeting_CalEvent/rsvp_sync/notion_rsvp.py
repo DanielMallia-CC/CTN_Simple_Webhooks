@@ -17,6 +17,14 @@ log = logging.getLogger(__name__)
 _DB_QUERY_URL = f"https://api.notion.com/v1/data_sources/{NOTION_RSVP_DATASOURCE_ID}/query"
 _PAGES_URL = "https://api.notion.com/v1/pages"
 
+# Notion database template IDs keyed by Google Calendar RSVP status.
+_RSVP_TEMPLATE_IDS = {
+    "declined": "34aa49d2541c80979384e979f43cae52",
+    "tentative": "34aa49d2541c80019818d94a213f3c14",
+    "accepted": "34aa49d2541c803e9d49f43f1ca2fea1",
+    "needsAction": "34aa49d2541c8012bcdcfbbd08067585",
+}
+
 
 # ---------------------------------------------------------------------------
 # Query helpers
@@ -59,7 +67,7 @@ def query_by_event_id(event_id: str) -> list[dict]:
 
 def _build_properties(record: AttendeeRecord) -> dict:
     """Build the Notion properties payload from an ``AttendeeRecord``."""
-    return {
+    props = {
         "Name": {"title": [{"text": {"content": record.display_name}}]},
         "Row Key": {"rich_text": [{"text": {"content": record.row_key}}]},
         "Event ID": {"rich_text": [{"text": {"content": record.event_id}}]},
@@ -68,6 +76,9 @@ def _build_properties(record: AttendeeRecord) -> dict:
         "RSVP Status": {"select": {"name": record.rsvp_status}},
         "Is Organizer": {"checkbox": record.is_organizer},
     }
+    if record.notion_page_id:
+        props["Gig"] = {"relation": [{"id": record.notion_page_id}]}
+    return props
 
 
 @on_exception(expo, requests.RequestException, max_tries=3, max_time=30)
@@ -77,10 +88,16 @@ def create_rsvp_row(record: AttendeeRecord) -> str:
         "parent": {"data_source_id": NOTION_RSVP_DATASOURCE_ID},
         "properties": _build_properties(record),
     }
+    template_id = _RSVP_TEMPLATE_IDS.get(record.rsvp_status)
+    if template_id:
+        payload["template"] = {
+            "type": "template_id",
+            "template_id": template_id,
+        }
     resp = _sess().post(_PAGES_URL, json=payload, timeout=10)
     resp.raise_for_status()
     page_id = resp.json()["id"]
-    log.info("Created RSVP row %s for %s", page_id, record.row_key)
+    log.info("Created RSVP row %s for %s (template=%s)", page_id, record.row_key, record.rsvp_status)
     return page_id
 
 

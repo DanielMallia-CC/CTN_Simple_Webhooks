@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import re
 import secrets
 import uuid
 from typing import Any, List
@@ -46,6 +47,21 @@ def _validate_push(event: dict) -> bool:
 # Extraction
 # ---------------------------------------------------------------------------
 
+_NOTION_URL_RE = re.compile(r"notion\.so/\S*?([0-9a-f]{32})")
+
+
+def _extract_notion_page_id(description: str | None) -> str | None:
+    """Extract a Notion page ID from a Google Calendar event description."""
+    if not description:
+        return None
+    m = _NOTION_URL_RE.search(description)
+    if not m:
+        return None
+    raw = m.group(1)
+    # Format as UUID with dashes
+    return f"{raw[:8]}-{raw[8:12]}-{raw[12:16]}-{raw[16:20]}-{raw[20:]}"
+
+
 def _process_events(events: list[dict]) -> List[AttendeeRecord]:
     """Extract AttendeeRecord list from changed Google Calendar events.
 
@@ -59,6 +75,7 @@ def _process_events(events: list[dict]) -> List[AttendeeRecord]:
             continue
 
         cancelled = ev.get("status") == "cancelled"
+        notion_page_id = _extract_notion_page_id(ev.get("description"))
 
         for att in ev["attendees"]:
             records.append(
@@ -71,6 +88,7 @@ def _process_events(events: list[dict]) -> List[AttendeeRecord]:
                     rsvp_status=att.get("responseStatus", "needsAction"),
                     is_organizer=att.get("organizer", False),
                     remove=cancelled,
+                    notion_page_id=notion_page_id,
                 )
             )
 
