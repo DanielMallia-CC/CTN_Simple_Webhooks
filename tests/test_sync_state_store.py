@@ -29,7 +29,7 @@ class TestGetSyncState:
         mock_client = MagicMock()
         mock_client.get_item.return_value = {}
 
-        with patch.object(store_mod, "dynamodb", mock_client):
+        with patch.object(store_mod, "_get_client", return_value=mock_client):
             result = store_mod.get_sync_state()
 
         assert result is None
@@ -51,7 +51,7 @@ class TestGetSyncState:
             }
         }
 
-        with patch.object(store_mod, "dynamodb", mock_client):
+        with patch.object(store_mod, "_get_client", return_value=mock_client):
             result = store_mod.get_sync_state()
 
         assert result is not None
@@ -69,7 +69,7 @@ class TestGetSyncState:
             }
         }
 
-        with patch.object(store_mod, "dynamodb", mock_client):
+        with patch.object(store_mod, "_get_client", return_value=mock_client):
             result = store_mod.get_sync_state()
 
         assert result is not None
@@ -88,7 +88,7 @@ class TestUpdateSyncToken:
     def test_calls_update_item_with_correct_params(self):
         mock_client = MagicMock()
 
-        with patch.object(store_mod, "dynamodb", mock_client):
+        with patch.object(store_mod, "_get_client", return_value=mock_client):
             store_mod.update_sync_token("new_token_xyz")
 
         mock_client.update_item.assert_called_once_with(
@@ -107,7 +107,7 @@ class TestUpdateChannelState:
     def test_calls_update_item_with_correct_params(self):
         mock_client = MagicMock()
 
-        with patch.object(store_mod, "dynamodb", mock_client):
+        with patch.object(store_mod, "_get_client", return_value=mock_client):
             store_mod.update_channel_state(
                 channel_id="chan_new",
                 resource_id="res_new",
@@ -139,7 +139,7 @@ class TestUpdateFullState:
     def test_calls_update_item_with_all_fields(self):
         mock_client = MagicMock()
 
-        with patch.object(store_mod, "dynamodb", mock_client):
+        with patch.object(store_mod, "_get_client", return_value=mock_client):
             store_mod.update_full_state(
                 sync_token="st_full",
                 channel_id="cid_full",
@@ -174,7 +174,7 @@ class TestPKConsistency:
         mock_client = MagicMock()
         mock_client.get_item.return_value = {}
 
-        with patch.object(store_mod, "dynamodb", mock_client):
+        with patch.object(store_mod, "_get_client", return_value=mock_client):
             store_mod.get_sync_state()
             store_mod.update_sync_token("t")
             store_mod.update_channel_state("c", "r", 0, "ct")
