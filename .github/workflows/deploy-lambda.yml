@@ -6,10 +6,29 @@ on:
       - main
     paths:
       - "CTN_NotionMeeting_CalEvent/**"
+      - "tests/**"
       - ".github/workflows/deploy-lambda.yml"
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: |
+          pip install pytest hypothesis requests backoff boto3 \
+            google-api-python-client google-auth httplib2
+
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     environment: Production
 
@@ -35,6 +54,7 @@ jobs:
             adapters/ \
             invites/ \
             utils/ \
+            rsvp_sync/ \
             -x "*.pyc" "__pycache__/*" "*/__pycache__/*"
 
       - name: Configure AWS credentials
@@ -56,6 +76,13 @@ jobs:
             --arg meetings_db "${{ secrets.PROD_MEETINGS_DB_ID }}" \
             --arg musician_portal_db "${{ secrets.PROD_MUSICIAN_PORTAL_DB_ID }}" \
             --arg site_visits_db "${{ secrets.PROD_SITE_VISITS_DB_ID }}" \
+            --arg rsvp_calendar_id "${{ secrets.RSVP_CALENDAR_ID }}" \
+            --arg notion_rsvp_ds_id "${{ secrets.NOTION_RSVP_DATASOURCE_ID }}" \
+            --arg rsvp_webhook_slug "${{ secrets.RSVP_WEBHOOK_SLUG }}" \
+            --arg rsvp_webhook_token "${{ secrets.RSVP_WEBHOOK_TOKEN }}" \
+            --arg rsvp_function_url "${{ secrets.RSVP_FUNCTION_URL }}" \
+            --arg rsvp_sync_state_key "${{ vars.RSVP_SYNC_STATE_KEY }}" \
+            --arg rsvp_channel_ttl "${{ vars.RSVP_CHANNEL_TTL_SECONDS }}" \
             '{
               "Variables": {
                 "DYNAMODB_TABLE_NAME": $dynamo_table,
@@ -63,7 +90,14 @@ jobs:
                 "NOTION_TOKEN_SECRET": $notion_token_secret,
                 "MEETINGS_DB_ID": $meetings_db,
                 "MUSICIAN_PORTAL_DB_ID": $musician_portal_db,
-                "SITE_VISITS_DB_ID": $site_visits_db
+                "SITE_VISITS_DB_ID": $site_visits_db,
+                "RSVP_CALENDAR_ID": $rsvp_calendar_id,
+                "NOTION_RSVP_DATASOURCE_ID": $notion_rsvp_ds_id,
+                "RSVP_WEBHOOK_SLUG": $rsvp_webhook_slug,
+                "RSVP_WEBHOOK_TOKEN": $rsvp_webhook_token,
+                "RSVP_FUNCTION_URL": $rsvp_function_url,
+                "RSVP_SYNC_STATE_KEY": $rsvp_sync_state_key,
+                "RSVP_CHANNEL_TTL_SECONDS": $rsvp_channel_ttl
               }
             }' > env.json
 
