@@ -14,6 +14,7 @@ class AttendeeRecord:
     rsvp_status: str         # accepted | declined | tentative | needsAction
     is_organizer: bool
     remove: bool = False     # True when attendee/event should be trashed
+    notion_page_id: Optional[str] = None  # extracted from event description
 
     @property
     def row_key(self) -> str:
