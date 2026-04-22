@@ -32,6 +32,8 @@ def query_by_row_key(row_key: str) -> Optional[dict]:
         }
     }
     resp = _sess().post(_DB_QUERY_URL, json=payload, timeout=10)
+    if not resp.ok:
+        log.error("query_by_row_key failed: %s %s", resp.status_code, resp.text)
     resp.raise_for_status()
     results = resp.json().get("results", [])
     return results[0] if results else None
