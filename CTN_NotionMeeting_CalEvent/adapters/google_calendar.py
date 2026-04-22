@@ -82,3 +82,94 @@ def upsert_event(
         if status == 404:
             return insert_event(service, calendar_id, event_body, send_updates=send_updates)
         raise
+
+
+def list_events_incremental(
+    service: Any,
+    calendar_id: str,
+    sync_token: str,
+) -> tuple[list[dict], str]:
+    """
+    Paginated events.list with syncToken.
+    Returns (events, new_sync_token).
+
+    No retry decorator — the caller needs to catch HttpError 410 directly
+    to trigger a full-sync fallback.
+    """
+    all_events: list[dict] = []
+    page_token: Optional[str] = None
+
+    while True:
+        response = (
+            service.events()
+            .list(calendarId=calendar_id, syncToken=sync_token, pageToken=page_token)
+            .execute()
+        )
+        all_events.extend(response.get("items", []))
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+
+    new_sync_token: str = response["nextSyncToken"]
+    return all_events, new_sync_token
+
+
+@on_exception(expo, HttpError, max_tries=3, max_time=20)
+def list_events_full(
+    service: Any,
+    calendar_id: str,
+) -> tuple[list[dict], str]:
+    """
+    Paginated events.list without syncToken.
+    Returns (events, initial_sync_token).
+    """
+    all_events: list[dict] = []
+    page_token: Optional[str] = None
+
+    while True:
+        response = (
+            service.events()
+            .list(calendarId=calendar_id, pageToken=page_token)
+            .execute()
+        )
+        all_events.extend(response.get("items", []))
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+
+    initial_sync_token: str = response["nextSyncToken"]
+    return all_events, initial_sync_token
+
+
+@on_exception(expo, HttpError, max_tries=3, max_time=20)
+def create_watch_channel(
+    service: Any,
+    calendar_id: str,
+    channel_id: str,
+    webhook_url: str,
+    token: str,
+    ttl: int,
+) -> Dict[str, Any]:
+    """Call events.watch to register a push notification channel."""
+    body = {
+        "id": channel_id,
+        "type": "web_hook",
+        "address": webhook_url,
+        "token": token,
+        "params": {"ttl": str(ttl)},
+    }
+    return service.events().watch(calendarId=calendar_id, body=body).execute()
+
+
+@on_exception(expo, HttpError, max_tries=3, max_time=20)
+def stop_watch_channel(
+    service: Any,
+    channel_id: str,
+    resource_id: str,
+) -> None:
+    """Call channels.stop to tear down a push notification channel."""
+    body = {
+        "id": channel_id,
+        "resourceId": resource_id,
+    }
+    service.channels().stop(body=body).execute()

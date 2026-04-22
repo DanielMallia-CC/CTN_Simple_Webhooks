@@ -22,3 +22,12 @@ GOOGLE_EVENT_URL_PROP = "Google_Event_URL"
 
 NOTION_USER_ENDPOINT = "https://api.notion.com/v1/users"
 NOTION_PAGES_ENDPOINT = "https://api.notion.com/v1/pages"
+
+# RSVP Sync configuration
+RSVP_CALENDAR_ID = os.getenv("RSVP_CALENDAR_ID")
+NOTION_RSVP_DATASOURCE_ID = os.getenv("NOTION_RSVP_DATASOURCE_ID")
+RSVP_WEBHOOK_SLUG = os.getenv("RSVP_WEBHOOK_SLUG")
+RSVP_SYNC_STATE_KEY = os.getenv("RSVP_SYNC_STATE_KEY", "rsvp_sync_state")
+RSVP_CHANNEL_TTL_SECONDS = int(os.getenv("RSVP_CHANNEL_TTL_SECONDS", "604800"))
+RSVP_WEBHOOK_TOKEN = os.getenv("RSVP_WEBHOOK_TOKEN")
+RSVP_FUNCTION_URL = os.getenv("RSVP_FUNCTION_URL")
