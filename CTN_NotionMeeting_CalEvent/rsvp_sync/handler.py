@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import secrets
@@ -265,9 +266,10 @@ def handle_bootstrap() -> dict:
                 exc,
             )
 
-    # Full sync to get all events and an initial sync token.
+    # Full sync — only future events.
+    time_min = datetime.datetime.now(datetime.timezone.utc).isoformat()
     events, sync_token = google_calendar.list_events_full(
-        service, config.RSVP_CALENDAR_ID
+        service, config.RSVP_CALENDAR_ID, time_min=time_min
     )
 
     # Process events and upsert to Notion.
