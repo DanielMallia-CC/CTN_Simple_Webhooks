@@ -1,0 +1,86 @@
+name: Deploy CTN_NotionMeeting_CalEvent
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "CTN_NotionMeeting_CalEvent/**"
+      - ".github/workflows/deploy-lambda.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: Production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Dependencies are handled via Lambda Layers (GoogleAPILayer, notion-client-backoff).
+      # If you ever need to bundle pip deps into the zip, uncomment:
+      # - run: pip install -r CTN_NotionMeeting_CalEvent/requirements.txt -t CTN_NotionMeeting_CalEvent/package
+
+      - name: Zip source
+        working-directory: CTN_NotionMeeting_CalEvent
+        run: |
+          zip -r ../function.zip \
+            lambda_function.py \
+            app.py \
+            config.py \
+            logging_setup.py \
+            adapters/ \
+            invites/ \
+            utils/ \
+            -x "*.pyc" "__pycache__/*" "*/__pycache__/*"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-north-1
+
+      - name: Prepare environment config
+        id: prepare
+        run: |
+          FUNCTION_NAME="CTN_NotionMeeting_CalEvent"
+
+          jq -n \
+            --arg dynamo_table "${{ secrets.PROD_DYNAMODB_TABLE_NAME }}" \
+            --arg secret_name "${{ secrets.PROD_SECRET_NAME }}" \
+            --arg notion_token_secret "${{ secrets.PROD_NOTION_TOKEN_SECRET }}" \
+            --arg meetings_db "${{ secrets.PROD_MEETINGS_DB_ID }}" \
+            --arg musician_portal_db "${{ secrets.PROD_MUSICIAN_PORTAL_DB_ID }}" \
+            --arg site_visits_db "${{ secrets.PROD_SITE_VISITS_DB_ID }}" \
+            '{
+              "Variables": {
+                "DYNAMODB_TABLE_NAME": $dynamo_table,
+                "SECRET_NAME": $secret_name,
+                "NOTION_TOKEN_SECRET": $notion_token_secret,
+                "MEETINGS_DB_ID": $meetings_db,
+                "MUSICIAN_PORTAL_DB_ID": $musician_portal_db,
+                "SITE_VISITS_DB_ID": $site_visits_db
+              }
+            }' > env.json
+
+          echo "function_name=$FUNCTION_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy
+        run: |
+          aws lambda update-function-code \
+            --function-name "${{ steps.prepare.outputs.function_name }}" \
+            --zip-file fileb://function.zip
+
+          aws lambda wait function-updated \
+            --function-name "${{ steps.prepare.outputs.function_name }}"
+
+          aws lambda update-function-configuration \
+            --function-name "${{ steps.prepare.outputs.function_name }}" \
+            --environment file://env.json
+
+          aws lambda wait function-updated \
+            --function-name "${{ steps.prepare.outputs.function_name }}"
