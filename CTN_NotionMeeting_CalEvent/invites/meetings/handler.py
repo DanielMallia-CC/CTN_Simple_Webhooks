@@ -21,11 +21,15 @@ def handle(body: Dict[str, Any]) -> Dict[str, Any]:
     page_id = data.get("id")
     notion_url = data.get("url") or ""
 
+    logger.info("Meetings handler entered page_id=%s", page_id)
+
     if not page_id:
+        logger.warning("Exiting: missing page_id")
         return {"statusCode": 400, "body": "Missing Notion page id"}
 
     notion_user_id = (body.get("source") or {}).get("user_id")
     if not notion_user_id:
+        logger.warning("Exiting: missing notion_user_id for page %s, source=%s", page_id, body.get("source"))
         return {"statusCode": 400, "body": "Missing Notion user_id"}
 
     # 1) Resolve organizer email
@@ -35,12 +39,14 @@ def handle(body: Dict[str, Any]) -> Dict[str, Any]:
         logger.exception("Failed to fetch Notion user email for page %s", page_id)
         return {"statusCode": 502, "body": "notion_error"}
     if not organizer_email:
+        logger.warning("Exiting: no email resolved for notion_user_id=%s page=%s", notion_user_id, page_id)
         return {"statusCode": 400, "body": "Unable to resolve organizer email"}
 
     # 2) Load OAuth record
     client_id = organizer_email.split("@")[0]
     record = get_db_item(client_id)
     if not record or not record.get("refresh_token"):
+        logger.warning("Exiting: no OAuth record for %s (client_id=%s) page=%s", organizer_email, client_id, page_id)
         return {"statusCode": 404, "body": f"No credentials for {organizer_email}"}
 
     if not record.get("notion_user_id"):
