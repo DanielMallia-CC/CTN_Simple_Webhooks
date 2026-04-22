@@ -36,7 +36,7 @@ def handle(body: Dict[str, Any]) -> Dict[str, Any]:
     # 1) Resolve organizer email
     logger.info("[meetings] resolving email for notion_user_id=%s", notion_user_id)
     try:
-        organizer_email = fetch_notion_user_email(notion_user_id)
+        organizer_email = "chutneynomad@gmail.com"  # TEMP: hardcoded for testing
     except requests.RequestException:
         logger.exception("[meetings] EXIT: failed to fetch Notion user email for page %s", page_id)
         return {"statusCode": 502, "body": "notion_error"}
