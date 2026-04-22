@@ -118,18 +118,28 @@ def list_events_incremental(
 def list_events_full(
     service: Any,
     calendar_id: str,
+    time_min: Optional[str] = None,
 ) -> tuple[list[dict], str]:
     """
     Paginated events.list without syncToken.
     Returns (events, initial_sync_token).
+
+    If *time_min* is provided it should be an RFC 3339 timestamp
+    (e.g. ``2026-01-01T00:00:00Z``).  Only events starting at or after
+    that time will be returned.
     """
     all_events: list[dict] = []
     page_token: Optional[str] = None
 
     while True:
+        kwargs: dict[str, Any] = {"calendarId": calendar_id}
+        if page_token:
+            kwargs["pageToken"] = page_token
+        if time_min:
+            kwargs["timeMin"] = time_min
         response = (
             service.events()
-            .list(calendarId=calendar_id, pageToken=page_token)
+            .list(**kwargs)
             .execute()
         )
         all_events.extend(response.get("items", []))
