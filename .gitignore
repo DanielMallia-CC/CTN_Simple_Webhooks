@@ -30,3 +30,6 @@ Thumbs.db
 
 # Hypothesis
 .hypothesis/
+
+#response.json
+response.json

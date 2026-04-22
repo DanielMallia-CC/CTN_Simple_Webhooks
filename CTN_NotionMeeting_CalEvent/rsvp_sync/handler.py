@@ -66,6 +66,43 @@ def _extract_notion_page_id(description: str | None) -> str | None:
     return page_id
 
 
+def _resolve_gig_page_id(musician_portal_page_id: str | None) -> str | None:
+    """Follow the Musician Portal page → Gig (Management) relation to get the Gig page ID."""
+    if not musician_portal_page_id:
+        return None
+    try:
+        from adapters.notion_client import _sess
+        resp = _sess().get(
+            f"https://api.notion.com/v1/pages/{musician_portal_page_id}/properties/{config.GIG_RELATION_PROP}",
+            timeout=10,
+        )
+        if not resp.ok:
+            # Property name might need URL encoding, try fetching the full page instead
+            log.warning("Property endpoint failed (%s), fetching full page", resp.status_code)
+            resp = _sess().get(
+                f"https://api.notion.com/v1/pages/{musician_portal_page_id}",
+                timeout=10,
+            )
+            resp.raise_for_status()
+            page = resp.json()
+            gig_prop = page.get("properties", {}).get(config.GIG_RELATION_PROP, {})
+            relations = gig_prop.get("relation", [])
+        else:
+            data = resp.json()
+            # Paginated property endpoint returns results array
+            relations = data.get("results", data.get("relation", []))
+
+        if relations:
+            gig_id = relations[0].get("id")
+            log.info("Resolved Gig page_id=%s from Musician Portal page %s", gig_id, musician_portal_page_id)
+            return gig_id
+        log.info("No Gig relation found on Musician Portal page %s", musician_portal_page_id)
+        return None
+    except Exception:
+        log.exception("Failed to resolve Gig from Musician Portal page %s", musician_portal_page_id)
+        return None
+
+
 def _process_events(events: list[dict]) -> List[AttendeeRecord]:
     """Extract AttendeeRecord list from changed Google Calendar events.
 
@@ -79,11 +116,12 @@ def _process_events(events: list[dict]) -> List[AttendeeRecord]:
             continue
 
         cancelled = ev.get("status") == "cancelled"
-        notion_page_id = _extract_notion_page_id(ev.get("description"))
+        musician_portal_id = _extract_notion_page_id(ev.get("description"))
+        notion_page_id = _resolve_gig_page_id(musician_portal_id)
         log.info(
-            "Processing event %s (%s): cancelled=%s, notion_page_id=%s, attendees=%d, has_description=%s",
-            ev["id"], ev.get("summary", ""), cancelled, notion_page_id,
-            len(ev.get("attendees", [])), bool(ev.get("description")),
+            "Processing event %s (%s): cancelled=%s, musician_portal_id=%s, gig_page_id=%s, attendees=%d",
+            ev["id"], ev.get("summary", ""), cancelled, musician_portal_id, notion_page_id,
+            len(ev.get("attendees", [])),
         )
 
         for att in ev["attendees"]:
