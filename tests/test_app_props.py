@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # We must mock modules that app.py imports at the top level *before* we
-# import app itself, because ``from invites import HANDLERS`` requires
+# import app itself, because ``from invites import get_handler`` requires
 # env-vars that won't be set in CI.
 # ---------------------------------------------------------------------------
 
@@ -38,7 +38,7 @@ safe_text = st.text(
     max_size=40,
 )
 
-# A known database_id that our mock HANDLERS dict will recognise
+# A known database_id that our mock get_handler will recognise
 KNOWN_DB_ID = "known-db-id-1234"
 
 # Strategy: Google push notification event (has both required headers)
@@ -138,14 +138,13 @@ def test_source_routing_correctness(category_and_event):
     mock_rsvp_handler.handle_renew_channel = mock_renew
     mock_rsvp_handler.handle_reconciliation_sync = mock_reconcile
 
-    mock_handlers = {KNOWN_DB_ID: mock_notion_handler}
-
-    with patch.dict("sys.modules", {}):
-        pass  # no-op, we patch at attribute level below
+    mock_get_handler = MagicMock(
+        side_effect=lambda db_id: mock_notion_handler if db_id == KNOWN_DB_ID else None
+    )
 
     with (
         patch("app.rsvp_handler", mock_rsvp_handler),
-        patch("app.HANDLERS", mock_handlers),
+        patch("app.get_handler", mock_get_handler),
     ):
         from app import lambda_handler
 
@@ -259,7 +258,7 @@ def test_job_type_read_from_top_level_not_body(job_type, body_job_type):
 
     with (
         patch("app.rsvp_handler", mock_rsvp_handler),
-        patch("app.HANDLERS", {}),
+        patch("app.get_handler", MagicMock(return_value=None)),
     ):
         from app import lambda_handler
 
