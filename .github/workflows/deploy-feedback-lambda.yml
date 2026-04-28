@@ -24,6 +24,7 @@ jobs:
         working-directory: CTN_Feedback
         run: |
           zip -r ../feedback-function.zip \
+            lambda_function.py \
             handler.py \
             config.py \
             notion_client.py \
