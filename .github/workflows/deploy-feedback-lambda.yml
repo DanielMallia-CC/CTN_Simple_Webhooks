@@ -44,7 +44,7 @@ jobs:
           FUNCTION_NAME="CTN_Feedback"
 
           jq -n \
-            --arg notion_token_secret "${{ secrets.PROD_NOTION_TOKEN_SECRET }}" \
+            --arg notion_token_secret "${{ secrets.DAK_NOTION_TOKEN_SECRET }}" \
             --arg actions_db "${{ secrets.DAK_FEEDBACK_ACTIONS_DB_ID }}" \
             --arg sprints_db "${{ secrets.DAK_FEEDBACK_SPRINTS_DB_ID }}" \
             --arg project_page "${{ secrets.DAK_FEEDBACK_PROJECT_PAGE_ID }}" \
