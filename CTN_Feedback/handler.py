@@ -30,6 +30,7 @@ def _parse_body(event: Dict[str, Any]) -> Dict[str, Any]:
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """AWS Lambda entry point for feedback webhook."""
     logger.info("[feedback] lambda invoked")
+    logger.info("[feedback] raw event keys: %s", list(event.keys()))
 
     try:
         body = _parse_body(event)
@@ -40,5 +41,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     data = body.get("data", {})
     page_id = data.get("id")
     logger.info("[feedback] processing feedback page_id=%s", page_id)
+    logger.info("[feedback] body keys: %s, data keys: %s", list(body.keys()), list(data.keys()))
+    logger.info("[feedback] properties keys: %s", list(data.get("properties", {}).keys()))
 
     return publish(body)
