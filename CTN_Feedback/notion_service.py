@@ -15,6 +15,7 @@ Notion API failures are non-blocking — caught and logged, never re-raised.
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -239,12 +240,24 @@ def publish(body: Dict[str, Any]) -> Dict[str, Any]:
             logger.warning("FEEDBACK_ACTIONS_DB_ID not configured")
             return {"statusCode": 500, "body": "actions database not configured"}
 
+        logger.info(
+            "[feedback] config: actions_db=%s sprints_db=%s project=%s assignee=%s bug_tpl=%s admin_tpl=%s",
+            NOTION_ACTIONS_DATABASE_ID,
+            NOTION_SPRINTS_DATABASE_ID or "(not set)",
+            NOTION_PROJECT_PAGE_ID or "(not set)",
+            NOTION_ASSIGNEE_PAGE_ID or "(not set)",
+            NOTION_BUG_TEMPLATE_ID or "(not set)",
+            NOTION_ADMIN_TEMPLATE_ID or "(not set)",
+        )
+
         # 1. Find current sprint
         sprint_id = _find_current_sprint_id()
+        logger.info("[feedback] sprint_id=%s", sprint_id or "(none)")
 
         # 2. Build title and properties
         title = format_title(feedback_type, priority)
         properties = _build_properties(title, feedback_type, sprint_id)
+        logger.info("[feedback] title=%s", title)
 
         # 3. Build page creation payload
         payload: Dict[str, Any] = {
@@ -259,8 +272,12 @@ def publish(body: Dict[str, Any]) -> Dict[str, Any]:
                 "type": "template_id",
                 "template_id": template_id,
             }
+            logger.info("[feedback] using template_id=%s", template_id)
+        else:
+            logger.info("[feedback] no template configured for type=%s", feedback_type)
 
         # 4. Create the action page (no body blocks)
+        logger.info("[feedback] create_page payload: %s", json.dumps(payload, default=str)[:2000])
         result = create_page(payload)
         created_id = result.get("id")
         logger.info("[feedback] action created page_id=%s for feedback=%s", created_id, page_id)

@@ -80,9 +80,11 @@ def _sess() -> requests.Session:
 def create_page(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Create a Notion page. Returns the response JSON."""
     url = f"{NOTION_API_BASE}/pages"
-    log.info("[feedback] creating page in Notion")
+    log.info("[feedback] creating page in Notion, payload: %s", json.dumps(payload, default=str)[:2000])
     resp = _sess().post(url, json=payload, timeout=10)
     log.info("[feedback] create page status=%s", resp.status_code)
+    if resp.status_code >= 400:
+        log.error("[feedback] create page error body: %s", resp.text[:1000])
     resp.raise_for_status()
     return resp.json()
 
@@ -91,9 +93,11 @@ def create_page(payload: Dict[str, Any]) -> Dict[str, Any]:
 def query_database(database_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """Query a Notion database. Returns the response JSON."""
     url = f"{NOTION_API_BASE}/databases/{database_id}/query"
-    log.info("[feedback] querying database %s", database_id)
+    log.info("[feedback] querying database %s, payload: %s", database_id, json.dumps(payload, default=str)[:1000])
     resp = _sess().post(url, json=payload, timeout=10)
     log.info("[feedback] query status=%s", resp.status_code)
+    if resp.status_code >= 400:
+        log.error("[feedback] query error body: %s", resp.text[:1000])
     resp.raise_for_status()
     return resp.json()
 
@@ -105,5 +109,7 @@ def get_database(database_id: str) -> Dict[str, Any]:
     log.info("[feedback] retrieving database %s", database_id)
     resp = _sess().get(url, timeout=10)
     log.info("[feedback] retrieve status=%s", resp.status_code)
+    if resp.status_code >= 400:
+        log.error("[feedback] retrieve error body: %s", resp.text[:1000])
     resp.raise_for_status()
     return resp.json()
