@@ -111,10 +111,10 @@ def format_title(feedback_type: str, priority: str) -> str:
     """Format the action page title.
 
     Pattern: CTN: [FEEDBACK - {Type}] - {Priority}
-    Appends ' - Important' for Bug/Fix and Question types.
+    Appends ' - Important' for Bug/Fix and Question types, or Critical priority.
     """
     title = f"CTN: [FEEDBACK - {feedback_type}] - {priority}"
-    if feedback_type in IMPORTANT_TYPES:
+    if feedback_type in IMPORTANT_TYPES or priority == "Critical":
         title += " - Important"
     return title
 
