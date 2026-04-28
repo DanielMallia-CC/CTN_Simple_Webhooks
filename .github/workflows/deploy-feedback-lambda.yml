@@ -1,0 +1,83 @@
+name: Deploy CTN_Feedback
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "CTN_Feedback/**"
+      - ".github/workflows/deploy-feedback-lambda.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: Production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Zip source
+        working-directory: CTN_Feedback
+        run: |
+          zip -r ../feedback-function.zip \
+            handler.py \
+            config.py \
+            notion_client.py \
+            notion_service.py \
+            -x "*.pyc" "__pycache__/*"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-north-1
+
+      - name: Prepare environment config
+        id: prepare
+        run: |
+          FUNCTION_NAME="CTN_Feedback"
+
+          jq -n \
+            --arg notion_token_secret "${{ secrets.PROD_NOTION_TOKEN_SECRET }}" \
+            --arg actions_db "${{ secrets.DAK_FEEDBACK_ACTIONS_DB_ID }}" \
+            --arg sprints_db "${{ secrets.DAK_FEEDBACK_SPRINTS_DB_ID }}" \
+            --arg project_page "${{ secrets.DAK_FEEDBACK_PROJECT_PAGE_ID }}" \
+            --arg assignee_page "${{ secrets.DAK_FEEDBACK_ASSIGNEE_PAGE_ID }}" \
+            --arg bug_template "${{ secrets.DAK_FEEDBACK_BUG_TEMPLATE_ID }}" \
+            --arg admin_template "${{ secrets.DAK_FEEDBACK_ADMIN_TEMPLATE_ID }}" \
+            --arg feedback_db "${{ secrets.CTN_FEEDBACK_DB_ID }}" \
+            '{
+              "Variables": {
+                "NOTION_TOKEN_SECRET": $notion_token_secret,
+                "FEEDBACK_ACTIONS_DB_ID": $actions_db,
+                "FEEDBACK_SPRINTS_DB_ID": $sprints_db,
+                "FEEDBACK_PROJECT_PAGE_ID": $project_page,
+                "FEEDBACK_ASSIGNEE_PAGE_ID": $assignee_page,
+                "FEEDBACK_BUG_TEMPLATE_ID": $bug_template,
+                "FEEDBACK_ADMIN_TEMPLATE_ID": $admin_template,
+                "FEEDBACK_DB_ID": $feedback_db
+              }
+            }' > env.json
+
+          echo "function_name=$FUNCTION_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy
+        run: |
+          aws lambda update-function-code \
+            --function-name "${{ steps.prepare.outputs.function_name }}" \
+            --zip-file fileb://feedback-function.zip
+
+          aws lambda wait function-updated \
+            --function-name "${{ steps.prepare.outputs.function_name }}"
+
+          aws lambda update-function-configuration \
+            --function-name "${{ steps.prepare.outputs.function_name }}" \
+            --environment file://env.json
+
+          aws lambda wait function-updated \
+            --function-name "${{ steps.prepare.outputs.function_name }}"
