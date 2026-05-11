@@ -75,25 +75,28 @@ def _extract_title_text(properties: Dict[str, Any], prop_name: str = "Feedback T
     return "".join(part.get("plain_text", "") for part in title_parts).strip()
 
 
-def parse_feedback_payload(body: Dict[str, Any]) -> Dict[str, Any]:
+def parse_feedback_payload(body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Parse the Notion automation webhook payload.
 
-    Returns a dict with: feedback_title, feedback_type, priority, page_id, status.
-    Raises ValueError if required fields are missing.
+    Returns a dict with: feedback_title, feedback_type, priority, page_id.
+    Returns None if the payload is missing data or has an unrecognised Type,
+    signalling the caller to return early with a 200 (no-op).
     """
     data = body.get("data", {})
     properties = data.get("properties", {})
     page_id = data.get("id")
 
     if not page_id:
-        raise ValueError("Missing page id in payload")
+        logger.info("[feedback] no page id in payload — skipping")
+        return None
 
     feedback_title = _extract_title_text(properties)
     feedback_type = _extract_select(properties, "Type")
     priority = _extract_select(properties, "Priority")
 
-    if not feedback_type:
-        raise ValueError("Missing Type property in feedback payload")
+    if not feedback_type or feedback_type not in VALID_TYPES:
+        logger.info("[feedback] type missing or unrecognised (%s) — skipping", feedback_type)
+        return None
 
     return {
         "feedback_title": feedback_title or "Untitled Feedback",
@@ -220,11 +223,9 @@ def publish(body: Dict[str, Any]) -> Dict[str, Any]:
     Returns a dict with statusCode and body for the Lambda response.
     Catches ALL exceptions — Notion failure must not block the response.
     """
-    try:
-        parsed = parse_feedback_payload(body)
-    except ValueError as e:
-        logger.warning("Invalid feedback payload: %s", str(e))
-        return {"statusCode": 400, "body": str(e)}
+    parsed = parse_feedback_payload(body)
+    if parsed is None:
+        return {"statusCode": 200, "body": "skipped"}
 
     page_id = parsed["page_id"]
     feedback_type = parsed["feedback_type"]
