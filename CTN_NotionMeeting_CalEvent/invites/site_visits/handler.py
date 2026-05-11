@@ -12,6 +12,7 @@ from adapters.token_store import (
 )
 from invites.site_visits.parser import parse_site_visits
 from invites.site_visits.notion_updates import persist_google_event_metadata
+from rsvp_sync.handler import seed_rsvp_from_event
 
 from logging_setup import logger
 
@@ -102,7 +103,11 @@ def handle(body: Dict[str, Any]) -> Dict[str, Any]:
         logger.warning("[site_visits] EXIT: no id or url in result, keys=%s", list(result.keys()))
         return {"statusCode": 500, "body": "invalid_calendar_response"}
 
-    # 6) Persist metadata back to Notion
+    # 6) Seed RSVP rows immediately so attendees appear in Notion without delay
+    logger.info("[site_visits] seeding RSVP rows for event %s", event_id)
+    seed_rsvp_from_event(result, notion_page_id=page_id)
+
+    # 7) Persist metadata back to Notion
     logger.info("[site_visits] persisting event metadata to Notion page %s", page_id)
     try:
         persist_google_event_metadata(
