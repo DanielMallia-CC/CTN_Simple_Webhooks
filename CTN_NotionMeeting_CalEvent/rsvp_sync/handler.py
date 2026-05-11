@@ -241,6 +241,67 @@ def _run_incremental_sync() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Immediate seeding from invite handlers
+# ---------------------------------------------------------------------------
+
+def seed_rsvp_from_event(calendar_event: dict, notion_page_id: str | None = None) -> None:
+    """Immediately seed RSVP rows from a freshly created/updated Google Calendar event.
+
+    Called by invite handlers right after ``upsert_event`` so that attendee rows
+    with ``needsAction`` status appear in the Notion RSVP database instantly,
+    without waiting for the next push notification or reconciliation job.
+
+    The upsert logic in ``notion_rsvp.upsert_or_trash`` is idempotent — when the
+    push notification arrives seconds later and runs an incremental sync, it will
+    find the rows already exist with the same status and skip them.
+
+    Args:
+        calendar_event: The full event dict returned by the Google Calendar API.
+        notion_page_id: The Notion page ID to link the RSVP rows to (Gig page for
+                        meetings/site_visits; Musician Portal page for musician_portal —
+                        the RSVP sync will resolve the Gig relation on subsequent syncs).
+    """
+    attendees = calendar_event.get("attendees")
+    if not attendees:
+        log.info("seed_rsvp_from_event: no attendees on event %s, skipping", calendar_event.get("id"))
+        return
+
+    event_id = calendar_event.get("id", "")
+    event_name = calendar_event.get("summary", "")
+    cancelled = calendar_event.get("status") == "cancelled"
+
+    records: list[AttendeeRecord] = []
+    for att in attendees:
+        records.append(
+            AttendeeRecord(
+                calendar_id=config.RSVP_CALENDAR_ID,
+                event_id=event_id,
+                event_name=event_name,
+                attendee_email=att["email"],
+                display_name=att.get("displayName", att["email"]),
+                rsvp_status=att.get("responseStatus", "needsAction"),
+                is_organizer=att.get("organizer", False),
+                remove=cancelled,
+                notion_page_id=notion_page_id,
+            )
+        )
+
+    log.info(
+        "seed_rsvp_from_event: seeding %d attendee records for event %s",
+        len(records),
+        event_id,
+    )
+    for record in records:
+        try:
+            notion_rsvp.upsert_or_trash(record)
+        except Exception:
+            log.exception(
+                "seed_rsvp_from_event: failed to upsert record %s — continuing",
+                record.row_key,
+            )
+
+
+# ---------------------------------------------------------------------------
 # Public orchestration functions
 # ---------------------------------------------------------------------------
 

@@ -13,6 +13,7 @@ from adapters.token_store import (
 from invites.musician_portal.parser import parse_musician_portal
 from invites.musician_portal.notion_updates import persist_google_event_metadata
 from logging_setup import logger
+from rsvp_sync.handler import seed_rsvp_from_event
 
 
 def handle(body: Dict[str, Any]) -> Dict[str, Any]:
@@ -101,7 +102,14 @@ def handle(body: Dict[str, Any]) -> Dict[str, Any]:
         logger.warning("[musician_portal] EXIT: no id or url in result, keys=%s", list(result.keys()))
         return {"statusCode": 500, "body": "invalid_calendar_response"}
 
-    # 6) Persist metadata back to Notion
+    # 6) Seed RSVP rows immediately so attendees appear in Notion without delay
+    # For musician portal, page_id is the musician portal page — seed_rsvp_from_event
+    # will pass it as notion_page_id; the RSVP sync's _resolve_gig_page_id will follow
+    # the relation to the Gig page when processing push notifications later.
+    logger.info("[musician_portal] seeding RSVP rows for event %s", event_id)
+    seed_rsvp_from_event(result, notion_page_id=page_id)
+
+    # 7) Persist metadata back to Notion
     logger.info("[musician_portal] persisting event metadata to Notion page %s", page_id)
     try:
         persist_google_event_metadata(
