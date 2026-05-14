@@ -40,8 +40,17 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
     data = body.get("data", {})
     page_id = data.get("id")
+    properties = data.get("properties", {})
+
     logger.info("[feedback] processing feedback page_id=%s", page_id)
     logger.info("[feedback] body keys: %s, data keys: %s", list(body.keys()), list(data.keys()))
-    logger.info("[feedback] properties keys: %s", list(data.get("properties", {}).keys()))
+    logger.info("[feedback] properties keys: %s", list(properties.keys()))
+    logger.info("[feedback] properties: %s", json.dumps(properties, default=str))
+
+    # Log the page name (Feedback Title)
+    title_prop = properties.get("Feedback Title", {})
+    title_parts = title_prop.get("title", [])
+    feedback_name = "".join(part.get("plain_text", "") for part in title_parts).strip()
+    logger.info("[feedback] feedback name: %s", feedback_name or "(no title)")
 
     return publish(body)
