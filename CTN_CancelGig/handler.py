@@ -66,9 +66,11 @@ def _get_notion_token() -> str:
     global _cached_token
     if _cached_token is not None:
         return _cached_token
+    logger.info("[cancel_gig] Fetching Notion token from secret: %s", NOTION_TOKEN_SECRET)
     secret_value = secrets_manager.get_secret_value(SecretId=NOTION_TOKEN_SECRET)
     secret_dict = json.loads(secret_value["SecretString"])
     _cached_token = secret_dict["INTERNAL_NOTION_API_KEY"]
+    logger.info("[cancel_gig] Token fetched, starts with: %s...", _cached_token[:12])
     return _cached_token
 
 
