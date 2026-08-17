@@ -35,7 +35,7 @@ jobs:
       - name: Prepare environment config
         run: |
           jq -n \
-            --arg notion_token_secret "${{ secrets.DAK_NOTION_TOKEN_SECRET }}" \
+            --arg notion_token_secret "${{ secrets.PROD_NOTION_TOKEN_SECRET }}" \
             --arg dynamo_table "${{ secrets.PROD_DYNAMODB_TABLE_NAME }}" \
             --arg secret_name "${{ secrets.PROD_SECRET_NAME }}" \
             '{
