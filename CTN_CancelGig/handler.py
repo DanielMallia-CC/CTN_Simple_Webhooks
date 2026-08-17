@@ -267,7 +267,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         actor_client_id = actor_email.split("@")[0]
         actor_service = load_service_for_client_id(actor_client_id)
 
-        gig_obj = retrieve_page(gig_page_id)
+        try:
+            gig_obj = retrieve_page(gig_page_id)
+        except Exception as e:
+            if "404" in str(e):
+                logger.warning("Gig page %s not found (already processed or deleted), skipping.", gig_page_id)
+                return _resp(200, {"ok": True, "skipped": True, "reason": "gig_page_not_found"}, start)
+            raise
+
         gig_props = gig_obj.get("properties") or {}
         logger.info("Gig page %s properties keys: %s", gig_page_id, sorted(list(gig_props.keys())))
 
