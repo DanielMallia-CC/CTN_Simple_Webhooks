@@ -1,0 +1,63 @@
+name: Deploy CTN_CancelGig
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "CTN_CancelGig/**"
+      - ".github/workflows/deploy-cancelgig-lambda.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: Production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zip source
+        working-directory: CTN_CancelGig
+        run: |
+          zip -r ../cancelgig-function.zip \
+            lambda_function.py \
+            handler.py \
+            config.py \
+            -x "*.pyc" "__pycache__/*"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-north-1
+
+      - name: Prepare environment config
+        run: |
+          jq -n \
+            --arg notion_token_secret "${{ secrets.DAK_NOTION_TOKEN_SECRET }}" \
+            --arg dynamo_table "${{ secrets.PROD_DYNAMODB_TABLE_NAME }}" \
+            --arg secret_name "${{ secrets.PROD_SECRET_NAME }}" \
+            '{
+              "Variables": {
+                "NOTION_TOKEN_SECRET": $notion_token_secret,
+                "DYNAMODB_TABLE_NAME": $dynamo_table,
+                "SECRET_NAME": $secret_name
+              }
+            }' > env.json
+
+      - name: Deploy
+        run: |
+          aws lambda update-function-code \
+            --function-name CTN_CancelGig \
+            --zip-file fileb://cancelgig-function.zip
+
+          aws lambda wait function-updated \
+            --function-name CTN_CancelGig
+
+          aws lambda update-function-configuration \
+            --function-name CTN_CancelGig \
+            --environment file://env.json
+
+          aws lambda wait function-updated \
+            --function-name CTN_CancelGig
